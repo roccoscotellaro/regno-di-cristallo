@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Il Regno di Cristallo</title>
+<meta name="theme-color" content="#6E1A2B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Regno">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,700;0,800;1,400&family=Alegreya+SC:wght@400;700&family=Cinzel:wght@600;700&family=Cinzel+Decorative:wght@700&family=UnifrakturMaguntia&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Il Regno di Cristallo</h1>
+      <div class="hgroup">
+        <button class="syncpill" id="syncpill" data-action="sync" data-s="local"><i></i><span>locale</span></button>
+        <button class="iconbtn" data-action="settings" aria-label="Impostazioni">⚙️</button>
+      </div>
+    </div>
+    <div class="xp" id="xp"></div>
+  </header>
+  <main id="view"></main>
+</div>
+<nav class="tabs" aria-label="Sezioni" id="tabs">
+  <div class="in">
+    <button data-tab="oggi"><span>🏰</span>Oggi</button>
+    <button data-tab="settimana"><span>📜</span>Settimana</button>
+    <button data-tab="spesa"><span>🧺</span>Spesa</button>
+    <button data-tab="casa"><span>🗺️</span>Casa</button>
+    <button data-tab="oracolo"><span>🔮</span>Oracolo</button>
+  </div>
+</nav>
+<div class="scrim" id="scrim" data-action="close-sheet"></div>
+<section class="sheet" id="sheet" role="dialog" aria-modal="true"><div class="in" id="sheet-body"></div></section>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
