@@ -245,3 +245,7 @@ nav.tabs button[aria-current="page"]::after{content:"";width:18px;height:2px;bac
 .badge b{font-family:"Cinzel",Georgia,serif;font-size:.85rem}
 .badge span:not(.bi){font-size:.82rem;color:var(--muted)}
 .badge i{font-size:.78rem;color:var(--amber)}
+
+.btn:disabled{opacity:.45;cursor:not-allowed}
+#errbar{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:90;background:#B8322A;color:#fff;
+  padding:10px 12px;border-radius:6px;font-size:.9rem;box-shadow:0 4px 12px rgba(0,0,0,.3)}

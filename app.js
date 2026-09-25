@@ -3,6 +3,18 @@ import { CONFIG } from "./config.js";
 import * as G from "./drive.js";
 import { deliver, askPermission, wasteICS, shareOrDownload } from "./notify.js";
 
+export const VERSION = "1.1.0";
+
+/* ---------- Errori visibili: se qualcosa si rompe, lo si legge sullo schermo ---------- */
+function showError(msg) {
+  let el = document.getElementById("errbar");
+  if (!el) { el = document.createElement("div"); el.id = "errbar"; el.setAttribute("role", "alert"); document.body.appendChild(el);
+    el.addEventListener("click", () => el.remove()); }
+  el.textContent = "Errore: " + msg + " (tocca per chiudere)";
+}
+window.addEventListener("error", e => showError(e.message || "sconosciuto"));
+window.addEventListener("unhandledrejection", e => showError(e.reason?.message || String(e.reason)));
+
 /* ---------- Archivio del dispositivo ---------- */
 const LS = {
   get(k, d = null) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -276,6 +288,7 @@ function vWelcome() {
       <p class="note" style="margin:0 0 10px">Dati di esempio salvati solo su questo telefono. Potrai collegare Drive dopo.</p>
       <button class="btn ghost" data-action="demo">Entra con la casa di prova</button></div>
     ${configured ? "" : `<p class="note">Per usare Drive compila prima <b>config.js</b> (vedi README).</p>`}
+    <p class="note" style="text-align:center">Versione ${VERSION}</p>
   </div>`;
 }
 
@@ -769,14 +782,16 @@ function settingsSheet() {
     <button class="btn ghost" data-action="export">Esporta il file della casa</button>
     <label class="btn ghost" style="text-align:center">Importa un file<input type="file" accept="application/json,.json" id="imp" hidden></label>
     <button class="btn ghost" data-action="leave">Scollega questo telefono</button>
-  </div>`);
+  </div>
+  <p class="note" style="text-align:center">Versione ${VERSION}</p>`);
 }
 
 /* ---------- Toast ---------- */
 let tt; function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 2200); }
 
 /* ---------- Azioni ---------- */
-document.addEventListener("click", async e => {
+document.addEventListener("click", e => { handleClick(e).catch(err => showError(err.message || String(err))); });
+async function handleClick(e) {
   const tb = e.target.closest("[data-tab]"); if (tb) { tab = tb.dataset.tab; render(); window.scrollTo(0, 0); return; }
   const b = e.target.closest("[data-action]"); if (!b) return;
   const a = b.dataset.action, v = b.dataset.v;
@@ -877,7 +892,7 @@ document.addEventListener("click", async e => {
     case "plan-apply": applyPlan(Number(v)); break;
     case "plan-discard": discardPlan(Number(v)); break;
   }
-});
+}
 function addShop() { const n = $("#shop-in").value.trim(); if (!n) return; store.put("shopping", "s_" + uid(), { name: n, done: false, order: Date.now() }); }
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") closeSheet();
