@@ -18,31 +18,37 @@ App web installabile (PWA) per iPhone. Il codice sta su GitHub Pages, la casa st
 
 1. Crea un repository `regno-di-cristallo` e carica tutti i file di questa cartella.
 2. **Settings → Pages**: sorgente "Deploy from a branch", ramo `main`, cartella `/ (root)`.
-3. L'indirizzo sarà `https://TUO-UTENTE.github.io/regno-di-cristallo/`.
+3. L'indirizzo sarà `https://roccoscotellaro.github.io/regno-di-cristallo/`.
 
 Il repository contiene solo codice: nessun dato della casa finisce su GitHub.
 
 ## 2. Configurare Google (una volta sola)
 
-Su [console.cloud.google.com](https://console.cloud.google.com):
+Su [console.cloud.google.com](https://console.cloud.google.com), nel progetto del Regno.
 
-1. **Crea un progetto** (es. "Regno di Cristallo") e annota il **numero del progetto** (Dashboard): va in `googleAppId`.
-2. **API e servizi → Libreria**: abilita **Google Drive API** e **Google Picker API**.
-3. **Schermata consenso OAuth**:
-   - Tipo "Esterno".
-   - Nome "Il Regno di Cristallo" e la tua email.
-   - Ambito da aggiungere: `.../auth/drive.file`.
-   - In "Utenti di test" aggiungi i due account Google.
-4. **Credenziali → Crea credenziali → ID client OAuth**:
-   - Tipo "Applicazione web".
-   - Origini JavaScript autorizzate: `https://TUO-UTENTE.github.io`.
-   - URI di reindirizzamento autorizzati: `https://TUO-UTENTE.github.io/regno-di-cristallo/`.
-   - L'ID client va in `googleClientId`.
-5. **Credenziali → Crea credenziali → Chiave API**: limitala alla Picker API e al referrer `https://TUO-UTENTE.github.io/*`. Va in `googleApiKey`.
+**Google Auth Platform** (menu ☰ → Google Auth Platform)
+1. **Branding**: nome app "Il Regno di Cristallo", la tua email di assistenza e quella dello sviluppatore. Salva.
+2. **Pubblico**:
+   - tipo di utente "Esterno";
+   - stato "Test";
+   - in "Utenti di test" aggiungi i due account Google.
+3. **Accesso ai dati**: "Aggiungi o rimuovi ambiti", cerca `drive.file`, spunta `.../auth/drive.file` e salva.
+4. **Client**: "Crea client", tipo "Applicazione web".
+   - Origini JavaScript autorizzate: `https://roccoscotellaro.github.io`
+   - URI di reindirizzamento autorizzati: `https://roccoscotellaro.github.io/regno-di-cristallo/`
 
-Carica il `config.js` compilato. Con la sola autorizzazione `drive.file` l'app vede solo il file del Regno, nient'altro del vostro Drive.
+   Crea e copia l'**ID client** in `googleClientId`.
 
-Lasciare l'app "in test" va bene: l'accesso dura un'ora e si rinnova da solo con un rapido passaggio da Google. La schermata "app non verificata" compare solo al primo accesso: tocca "Continua".
+**API e servizi** (menu ☰ → API e servizi)
+
+5. **Libreria**: abilita **Google Drive API** e **Google Picker API**.
+6. **Credenziali**: "+ Crea credenziali" → "Chiave API".
+   - Restrizioni applicazioni: "Siti web", aggiungi `https://roccoscotellaro.github.io/*`.
+   - Restrizioni API: solo "Google Picker API".
+
+   Copia la chiave in `googleApiKey`.
+
+Il **numero del progetto** (Panoramica del progetto, o Impostazioni) va in `googleAppId`.
 
 ## 3. Installare sui due iPhone
 
