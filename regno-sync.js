@@ -14,7 +14,7 @@
 
 export const SCHEMA = "regno-di-cristallo";
 export const SCHEMA_VERSION = 1;
-export const COLLECTIONS = ["players", "events", "meals", "shopping", "pantry", "rooms", "quests", "waste", "xp", "settings", "recipes", "achievements", "log"];
+export const COLLECTIONS = ["players", "events", "meals", "shopping", "pantry", "rooms", "quests", "waste", "xp", "settings", "recipes", "achievements", "log", "birthdays"];
 
 /* ---------- Orologio logico ibrido (HLC) ----------
  * Formato "000001727180000000:0003:dev_ab12": millisecondi, contatore, dispositivo.

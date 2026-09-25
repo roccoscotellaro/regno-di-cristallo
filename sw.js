@@ -1,8 +1,8 @@
 /* Service worker: l'app si apre anche senza rete.
  * I file dell'app si prendono prima dalla rete (così gli aggiornamenti arrivano subito)
  * e dalla cache solo se si è offline. I caratteri restano in cache. */
-const CACHE = "regno-v3";
-const SHELL = ["./", "index.html", "styles.css", "app.js", "regno-sync.js", "drive.js", "notify.js", "config.js",
+const CACHE = "regno-v4";
+const SHELL = ["./", "index.html", "styles.css", "app.js", "regno-sync.js", "drive.js", "notify.js", "calendar.js", "config.js",
   "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });

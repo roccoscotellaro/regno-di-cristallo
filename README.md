@@ -50,6 +50,58 @@ Su [console.cloud.google.com](https://console.cloud.google.com), nel progetto de
 
 Il **numero del progetto** (Panoramica del progetto, o Impostazioni) va in `googleAppId`.
 
+## 2b. Google Calendar (facoltativo)
+
+1. **API e servizi → Libreria**: abilita **Google Calendar API**.
+2. **Google Auth Platform → Accesso ai dati → Aggiungi o rimuovi ambiti**: aggiungi `.../auth/calendar.readonly` e `.../auth/calendar.app.created`, poi salva.
+3. Nell'app: ⚙️ → Calendari → **Collega Google Calendar**.
+4. Spunta i calendari da vedere nel Regno. Ognuno sceglie i suoi sul proprio telefono.
+5. Da un solo telefono: **Crea il calendario del Regno**, poi **Invita** l'altra persona.
+
+Nel calendario del Regno finiscono:
+- gli impegni, compresi quelli settimanali;
+- la raccolta rifiuti, con avviso alle 20:00 della sera prima;
+- i genetliaci, con avviso una settimana prima e il giorno prima.
+
+Per vederlo nel Calendario di iPhone: Impostazioni → Calendario → Account → Aggiungi account → Google, con "Calendari" attivo.
+
+## 2c. Calendari iCloud
+
+Apple non permette alle app web di leggere iCloud direttamente. Ci sono due strade, anche insieme.
+
+### A. Automatica: il calendario iCloud "abbonato" in Google
+
+1. Su iPhone: app Calendario → Calendari → (i) accanto al calendario → attiva **Calendario pubblico** → Condividi link → Copia.
+2. Da computer, su [calendar.google.com](https://calendar.google.com): Altri calendari → **+** → **Da URL**. Incolla il link sostituendo `webcal://` con `https://`.
+3. Nel Regno: ⚙️ → Calendari Google → Aggiorna l'elenco → spunta il nuovo calendario.
+
+Limiti:
+- Google aggiorna i calendari abbonati da solo, ma **con ritardo**, anche di diverse ore.
+- Chi conosce il link può vedere il calendario. È lungo e casuale, ma è pubblico.
+
+### B. Istantanea: il Comando rapido
+
+Crea una volta, nell'app **Comandi**, un comando chiamato "Regno: impegni iCloud":
+1. **Trova eventi di Calendario** con filtro "Data di inizio" → "è nei prossimi" → 30 giorni. Ordina per data di inizio, nessun limite.
+2. **Ripeti con ogni elemento**. Dentro la ripetizione:
+   - **Formatta data**: Elemento ripetuto → Data di inizio, formato personalizzato `yyyy-MM-dd HH:mm`.
+   - **Formatta data**: Elemento ripetuto → Data di fine, stesso formato.
+   - **Testo**: `[Data inizio formattata]|[Data fine formattata]|[Titolo]|[Calendario]|[È tutto il giorno]`. Ogni `[...]` è una variabile: Titolo, Calendario ed È tutto il giorno si scelgono toccando Elemento ripetuto.
+3. **Combina testo** (Risultati ripetizione) con **Nuova riga**.
+4. **Copia negli appunti**.
+
+Poi apri il Regno: ⚙️ → **Incolla impegni da iCloud**. Se l'importazione è vecchia di 3 giorni, la schermata Oggi te lo ricorda.
+
+Puoi anche farlo partire da solo ogni mattina: Comandi → Automazione → Ora del giorno → "Esegui immediatamente". A quel punto resta solo da incollare.
+
+Gli impegni importati sono visibili solo sul telefono che li ha incollati, come i calendari Google personali.
+
+Per entrambe le strade vale una cosa in più: se un impegno di stasera finisce dopo le 20:00, il Regno propone da solo un pasto rapido.
+
+### C. Da ora in avanti
+
+Su iPhone: Impostazioni → Calendario → **Calendario predefinito** → un calendario Google. I nuovi impegni finiscono su Google e il Regno li vede subito. Quelli vecchi restano su iCloud.
+
 ## 3. Installare sui due iPhone
 
 1. Apri l'indirizzo in **Safari** (non Chrome).
@@ -86,13 +138,25 @@ In tutti i casi le modifiche arrivano in una scheda e nulla cambia finché non t
 - **Titoli nobiliari**: l'XP della casa fa salire di rango, da Scudieri a Sovrani del Regno.
 - **Sala del trono**: si apre toccando la barra dell'XP in alto e contiene:
   - la **cronaca della settimana**: quest per persona, equilibrio dei carichi, spesa, sprechi, cene decise, nuove imprese. Il lunedì arriva anche come avviso.
-  - le **13 imprese** da sbloccare insieme, come Castello d'oro, Sette soli, Alleanza e Nulla va perduto.
+  - le **14 imprese** da sbloccare insieme, come Castello d'oro, Sette soli, Alleanza e Nulla va perduto.
 - **Ricettario** (Spesa → Ricette):
   - 30 piatti di partenza, più quelli che aggiungete voi.
   - Ogni ricetta dice se si può fare con la dispensa o cosa manca.
   - Da una ricetta puoi metterla in programma o aggiungere i mancanti alla lista.
   - Le preferite hanno la precedenza nei suggerimenti e nel pianificatore.
   - I piatti proposti dall'Oracolo si salvano con un tocco.
+
+## Inserire le cose
+
+- **Pulsante + in basso a destra**, presente in ogni sezione tranne l'Oracolo. Da lì aggiungi:
+  - una quest, scegliendo stanza, frequenza, fatica, a chi tocca e l'ultima volta che è stata fatta;
+  - un impegno, un pasto, più articoli di spesa insieme (uno per riga o separati da virgola);
+  - un oggetto in dispensa con scadenza, una ricetta, un genetliaco, una stanza.
+- **Quest**: nella mappa tocca una stanza, poi il nome della quest per modificarla o eliminarla.
+- **Genetliaci**: in Settimana c'è "Genetliaci in arrivo". Si possono annotare idee dono e l'anno di nascita, per sapere quanti anni si compiono.
+  - Avvisi una settimana prima, il giorno prima e il giorno stesso.
+  - Il pulsante "Idee dono dall'Oracolo" chiede suggerimenti per il regalo.
+- **L'Oracolo** può proporre anche nuove quest e genetliaci: "aggiungi le faccende per il balcone", "segna il compleanno di mia madre il 3 marzo".
 
 ## Quando sincronizza
 

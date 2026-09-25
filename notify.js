@@ -36,10 +36,10 @@ const pad = n => String(n).padStart(2, "0");
 const ymd = d => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
 
 /* Calendario della raccolta: eventi settimanali con avviso alle 20:00 della sera prima. */
-export function wasteICS(bins) {
+export function wasteICS(bins, birthdays = []) {
   const now = new Date();
   const stamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
-  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Il Regno di Cristallo//IT", "CALSCALE:GREGORIAN", "X-WR-CALNAME:Raccolta rifiuti"];
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Il Regno di Cristallo//IT", "CALSCALE:GREGORIAN", "X-WR-CALNAME:Il Regno di Cristallo"];
   for (const b of bins) {
     if (!b.days?.length) continue;
     const first = new Date(now); first.setDate(first.getDate() + 1);
@@ -51,6 +51,15 @@ export function wasteICS(bins) {
       `SUMMARY:Raccolta ${b.name}`, "DESCRIPTION:Il Regno di Cristallo: porta fuori il bidone la sera prima.",
       "TRANSP:TRANSPARENT",
       "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:Stasera porta fuori: ${b.name}`, "TRIGGER:-PT4H", "END:VALARM",
+      "END:VEVENT");
+  }
+  for (const b of birthdays) {
+    const [m, d] = b.md.split("-"), y = b.year || 2000;
+    lines.push("BEGIN:VEVENT", `UID:genetliaco-${b.id}@regno-di-cristallo`, `DTSTAMP:${stamp}`,
+      `DTSTART;VALUE=DATE:${y}${m}${d}`, "RRULE:FREQ=YEARLY", `SUMMARY:🎂 Genetliaco di ${b.name}`,
+      `DESCRIPTION:${(b.note || "Il Regno di Cristallo").replace(/\n/g, " ")}`, "TRANSP:TRANSPARENT",
+      "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:Domani il genetliaco di ${b.name}`, "TRIGGER:-PT15H", "END:VALARM",
+      "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:Tra una settimana il genetliaco di ${b.name}`, "TRIGGER:-P6DT15H", "END:VALARM",
       "END:VEVENT");
   }
   lines.push("END:VCALENDAR");

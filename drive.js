@@ -3,6 +3,11 @@
 import { CONFIG } from "./config.js";
 
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
+export const CAL_SCOPES = "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.app.created";
+const flag = k => { try { return localStorage.getItem(k) === "1"; } catch (e) { return false; } };
+/* Il calendario si chiede solo a chi lo attiva; da lì in poi resta negli accessi successivi. */
+export const wantCalendar = on => { try { on ? localStorage.setItem("regno.wantcal", "1") : localStorage.removeItem("regno.wantcal"); } catch (e) {} };
+export const calendarGranted = () => flag("regno.calok");
 const TK = "regno.gtoken";
 const redirectUri = () => location.origin + location.pathname;
 
@@ -13,8 +18,11 @@ export function handleRedirect() {
     return false;
   }
   const p = new URLSearchParams(location.hash.slice(1));
-  const tok = { t: p.get("access_token"), exp: Date.now() + (Number(p.get("expires_in") || 3600) - 60) * 1000 };
-  try { localStorage.setItem(TK, JSON.stringify(tok)); } catch (e) {}
+  const tok = { t: p.get("access_token"), exp: Date.now() + (Number(p.get("expires_in") || 3600) - 60) * 1000, scope: p.get("scope") || "" };
+  try {
+    localStorage.setItem(TK, JSON.stringify(tok));
+    if (tok.scope.includes("calendar.readonly")) localStorage.setItem("regno.calok", "1");
+  } catch (e) {}
   history.replaceState(null, "", redirectUri());
   return true;
 }
@@ -28,7 +36,7 @@ export function login({ silent = false } = {}) {
   const u = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   u.search = new URLSearchParams({
     client_id: CONFIG.googleClientId, redirect_uri: redirectUri(), response_type: "token",
-    scope: SCOPE, include_granted_scopes: "true", prompt: silent ? "" : "select_account",
+    scope: flag("regno.wantcal") ? `${SCOPE} ${CAL_SCOPES}` : SCOPE, include_granted_scopes: "true", prompt: silent ? "" : "select_account",
   }).toString();
   location.href = u.toString();
 }
