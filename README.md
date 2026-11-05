@@ -185,4 +185,4 @@ Con un Apple ID gratuito l'app va reinstallata ogni 7 giorni.
 - **Solo le mie**: in Oggi e nelle stanze mostra solo le quest affidate a te o a chiunque.
 
 ## Ricominciare da capo (1.4.1)
-⚙️ → in fondo, **Ricomincia da capo**: scrivi AZZERA e tocca "Azzera il Regno". Cancella impegni, pasti, spesa, dispensa, ricette vostre, genetliaci, punti e imprese su entrambi i telefoni. Restano i nomi, il collegamento a Drive e ai calendari. Stanze, quest e raccolta tornano quelle iniziali.
+⚙️ → in fondo, **Ricomincia da capo**: scrivi AZZERA e tocca "Azzera il Regno". Cancella impegni, pasti, spesa, dispensa, ricette vostre, genetliaci, punti e imprese su entrambi i telefoni. Restano i nomi, il collegamento a Drive e ai calendari. Stanze e raccolta tornano quelle iniziali; le quest si cancellano tutte (c'è una casella per rimettere quelle di esempio). In Casa c'è anche "Elimina tutte le quest".

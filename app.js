@@ -4,7 +4,7 @@ import * as G from "./drive.js";
 import { deliver, askPermission, wasteICS, shareOrDownload } from "./notify.js";
 import * as C from "./calendar.js";
 
-export const VERSION = "1.4.1";
+export const VERSION = "1.4.2";
 
 /* ---------- Errori visibili: se qualcosa si rompe, lo si legge sullo schermo ---------- */
 function showError(msg) {
@@ -265,17 +265,17 @@ function migrateWaste() {
 }
 /* Azzeramento: ogni voce diventa una cancellazione che si sincronizza, poi si rimette la casa iniziale */
 const KEEP_SETTINGS = new Set(["calendar", "household", "waste-v2"]);
-function resetHouse() {
+function resetHouse(keepQuests = false) {
   for (const c of Object.keys(store.doc.data)) {
     if (c === "players") continue;
     for (const r of store.list(c)) if (!(c === "settings" && KEEP_SETTINGS.has(r.id))) store.del(c, r.id);
   }
   const ps = players();
   /* Stanze e raccolta riusano gli stessi id: vanno "rianimate" esplicitamente */
-  seedHouse({ put: (c, id, f) => store.put(c, id, { ...f, _deleted: false }) }, { n1: ps[0]?.name, n2: ps[1]?.name, demo: false });
+  seedHouse({ put: (c, id, f) => store.put(c, id, { ...f, _deleted: false }) }, { n1: ps[0]?.name, n2: ps[1]?.name, demo: false, noQuests: !keepQuests });
   [K.chat, "regno.icloud", "regno.rq"].forEach(LS.del);
 }
-function seedHouse(s, { n1, n2, demo }) {
+function seedHouse(s, { n1, n2, demo, noQuests }) {
   const T = TODAY;
   s.put("players", "p1", { name: n1 || "Giocatore 1" });
   s.put("players", "p2", { name: n2 || "Giocatore 2" });
@@ -286,7 +286,7 @@ function seedHouse(s, { n1, n2, demo }) {
     ["cucina", "Sgrassare il piano cottura", 3, -1, 10], ["cucina", "Pulire il frigo", 14, -20, 25], ["soggiorno", "Aspirapolvere", 3, -3, 15],
     ["soggiorno", "Spolverare", 7, -2, 10], ["bagno", "Pulire il bagno", 7, -8, 25], ["bagno", "Cambiare gli asciugamani", 4, -2, 5],
     ["camera", "Cambiare le lenzuola", 7, -7, 15], ["studio", "Riordinare la scrivania", 7, -1, 10]];
-  Q.forEach(([roomId, title, every, last, xp]) => s.put("quests", "q_" + uid(), { roomId, title, every, last: demo ? addDays(T, last) : null, xp }));
+  if (!noQuests) Q.forEach(([roomId, title, every, last, xp]) => s.put("quests", "q_" + uid(), { roomId, title, every, last: demo ? addDays(T, last) : null, xp }));
   RACCOLTA.forEach(([id, name, days], i) => s.put("waste", id, { name, days, order: i }));
   if (!demo) return;
   [["Palestra", 0, "18:30", "attività", false], ["Dentista", 1, "17:00", "evento", false], ["Turno in negozio", 2, "21:00", "attività", true], ["Serata giochi da tavolo", 4, "21:00", "evento", false]]
@@ -654,7 +654,9 @@ function vCasa() {
   <p class="sub">Ogni stanza ha il suo stemma: torna d'oro quando le sue quest sono completate.</p>
   <div class="map">${rows.map(r => `<div class="hexrow">${r.map(hex).join("")}</div>`).join("")}</div>
   <div class="legend"><span style="--c:#D4AE48">oro, in ordine</span><span style="--c:#2F4C92">azzurro, da fare</span><span style="--c:#B0352A">rosso, in ritardo</span></div>
-  <p style="text-align:center;margin:10px 0 0"><button class="btn ghost small" data-action="rooms-edit">Modifica le stanze</button></p>
+  <p style="text-align:center;margin:10px 0 0"><button class="btn ghost small" data-action="rooms-edit">Modifica le stanze</button>
+    ${L("quests").length ? `<button class="btn ghost small danger" data-action="quests-clear">Elimina tutte le quest (${L("quests").length})</button>` : ""}</p>
+  ${L("quests").length ? "" : `<p class="note" style="text-align:center">Nessuna quest: tocca una stanza o il + per crearne.</p>`}
   <h3>Calendario raccolta</h3>
   <p class="sub">Tocca i giorni di passaggio. L'avviso arriva la sera prima.</p>
   <div class="bins">${bins().map(b => `<div class="bin"><span class="l">${esc(b.name)}</span>
@@ -1156,8 +1158,9 @@ function settingsSheet() {
     <button class="btn ghost" data-action="leave">Scollega questo telefono</button>
   </div>
   <h3>Ricomincia da capo</h3>
-  <p class="sub">Cancella impegni, pasti, spesa, dispensa, ricette vostre, genetliaci, punti e imprese. Restano i nomi dei giocatori, il collegamento a Drive e ai calendari. Stanze, quest e raccolta tornano quelle iniziali.</p>
+  <p class="sub">Cancella impegni, pasti, spesa, dispensa, ricette vostre, genetliaci, punti e imprese. Restano i nomi dei giocatori, il collegamento a Drive e ai calendari. Stanze e raccolta tornano quelle iniziali, le quest si cancellano tutte.</p>
   <div class="stack"><input class="field" id="reset-word" placeholder='Scrivi AZZERA per confermare' autocomplete="off" autocapitalize="characters">
+    <label class="checkrow"><input type="checkbox" id="reset-q"> Rimetti le quest di esempio</label>
     <button class="btn ghost danger" data-action="reset">Azzera il Regno</button></div>
   <p class="note">Vale per entrambi i telefoni: all'altro arriva alla prossima sincronizzazione. Prima, se vuoi, esporta una copia di sicurezza.</p>
   <p class="note" style="text-align:center">Versione ${VERSION}</p>`);
@@ -1191,7 +1194,7 @@ async function handleClick(e) {
     case "leave": if (confirm("Scollegare questo telefono? I dati restano sul file Drive, ma spariscono da qui.")) { [K.doc, K.file, K.me, K.chat, K.mode].forEach(LS.del); G.forgetToken(); location.reload(); } break;
     case "me": LS.set(K.me, v); render(); settingsSheet(); break;
     case "reset": { if ($("#reset-word").value.trim().toUpperCase() !== "AZZERA") { toast("Scrivi AZZERA per confermare"); $("#reset-word").focus(); return; }
-      resetHouse(); closeSheet(); tab = "oggi"; render(); toast("Il Regno ricomincia da capo"); break; }
+      resetHouse($("#reset-q").checked); closeSheet(); tab = "oggi"; render(); toast("Il Regno ricomincia da capo"); break; }
     /* oggi */
     case "toggle-late": store.put("settings", "late-" + TODAY, { value: !lateTonight() }); break;
     case "set-dinner": store.put("meals", TODAY, { cena: v }); toast("Cena di stasera aggiornata"); break;
@@ -1208,6 +1211,8 @@ async function handleClick(e) {
     case "mine": LS.set("regno.mine", !onlyMine()); render(); if (b.dataset.room) roomSheet(b.dataset.room); break;
     case "quest-del": if (confirm("Eliminare questa quest?")) { store.del("quests", v); b.dataset.room ? roomSheet(b.dataset.room) : closeSheet(); } break;
     case "room": roomSheet(v); break;
+    case "quests-clear": { const n = L("quests").length; if (!confirm(`Eliminare tutte le ${n} quest? Stanze, punti e imprese restano.`)) return;
+      L("quests").forEach(q => store.del("quests", q.id)); toast(`${n} quest eliminate`); break; }
     case "pan-edit": { const it = store.get("pantry", v);
       openSheet(`<h2>${esc(it.name)}</h2><p class="sub">Nome e scadenza nell'inventario.</p>
         <div class="stack"><input class="field" id="pe-n" value="${esc(it.name)}"><input class="field" id="pe-d" type="date" value="${esc(it.expires || "")}" aria-label="Scadenza">
