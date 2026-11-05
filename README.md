@@ -176,3 +176,10 @@ Richiede:
 - l'Apple Developer Program (99 €/anno) per installarla su entrambi gli iPhone tramite TestFlight.
 
 Con un Apple ID gratuito l'app va reinstallata ogni 7 giorni.
+
+
+## Novità della 1.4
+- **Impegni modificabili**: tocca il nome di un impegno in Oggi o in Settimana. Si possono ripetere ogni settimana, mese o anno (bollette, tagliando, scadenze). Di una serie puoi togliere un solo giorno o eliminarla tutta.
+- **Rimandare una quest**: il pulsante "Domani" la sposta al giorno dopo senza far diventare rosso lo stemma. Dalla scheda della stanza, "Oggi" annulla il rinvio.
+- **Spesa per reparti**: la lista si divide da sola nel giro del supermercato. Tocca un articolo per cambiarne il reparto; la scelta resta per le volte successive, su entrambi i telefoni.
+- **Solo le mie**: in Oggi e nelle stanze mostra solo le quest affidate a te o a chiunque.

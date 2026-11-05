@@ -4,7 +4,7 @@ import * as G from "./drive.js";
 import { deliver, askPermission, wasteICS, shareOrDownload } from "./notify.js";
 import * as C from "./calendar.js";
 
-export const VERSION = "1.3.0";
+export const VERSION = "1.4.0";
 
 /* ---------- Errori visibili: se qualcosa si rompe, lo si legge sullo schermo ---------- */
 function showError(msg) {
@@ -49,8 +49,20 @@ const players = () => L("players").sort((a, b) => a.id.localeCompare(b.id));
 const me = () => LS.get(K.me) || players()[0]?.id;
 const pname = id => store.get("players", id)?.name || "Qualcuno";
 const rooms = () => L("rooms").sort((a, b) => (a.order || 0) - (b.order || 0)).map(r => ({ ...r, quests: L("quests").filter(q => q.roomId === r.id) }));
-const eventsOn = d => L("events").filter(e => !e.skip?.includes(d) && (e.date === d || (e.repeat === "weekly" && e.date <= d && parse(e.date).getDay() === parse(d).getDay())))
-  .sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+/* Ricorrenze: settimanale, mensile (stesso giorno; nei mesi più corti l'ultimo giorno), annuale */
+const REPEAT = [["none", "Una volta"], ["weekly", "Ogni settimana"], ["monthly", "Ogni mese"], ["yearly", "Ogni anno"]];
+const repLabel = r => ({ weekly: "ogni settimana", monthly: "ogni mese", yearly: "ogni anno" }[r] || "");
+const monthLen = d => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+function occurs(e, d) {
+  if (e.skip?.includes(d) || !e.date || e.date > d) return false;
+  if (e.date === d) return true;
+  const a = parse(e.date), b = parse(d), sameDay = b.getDate() === Math.min(a.getDate(), monthLen(b));
+  if (e.repeat === "weekly") return a.getDay() === b.getDay();
+  if (e.repeat === "monthly") return sameDay;
+  if (e.repeat === "yearly") return a.getMonth() === b.getMonth() && sameDay;
+  return false;
+}
+const eventsOn = d => L("events").filter(e => occurs(e, d)).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
 /* Genetliaci */
 const isLeap = y => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 function bdDate(md, year) { return md === "02-29" && !isLeap(year) ? `${year}-02-28` : `${year}-${md}`; }
@@ -123,8 +135,12 @@ function evBody(e, tz) {
     b.start = { dateTime: `${e.date}T${e.time}:00`, timeZone: tz };
     b.end = { dateTime: `${iso(en)}T${pad(en.getHours())}:${pad(en.getMinutes())}:00`, timeZone: tz };
   } else { b.start = { date: e.date }; b.end = { date: addDays(e.date, 1) }; }
-  if (e.repeat === "weekly") {
-    b.recurrence = ["RRULE:FREQ=WEEKLY", ...(e.skip || []).map(d => e.time ? `EXDATE;TZID=${tz}:${d.replace(/-/g, "")}T${e.time.replace(":", "")}00` : `EXDATE;VALUE=DATE:${d.replace(/-/g, "")}`)];
+  const freq = { weekly: "WEEKLY", monthly: "MONTHLY", yearly: "YEARLY" }[e.repeat];
+  if (freq) {
+    /* Giorno 29-31: nei mesi più corti cade l'ultimo giorno, come nell'app */
+    const dd = parse(e.date).getDate(), mm = parse(e.date).getMonth() + 1;
+    const tail = dd > 28 && freq !== "WEEKLY" ? `${freq === "YEARLY" ? `;BYMONTH=${mm}` : ""};BYMONTHDAY=${[...Array(dd - 27)].map((_, i) => 28 + i).join(",")};BYSETPOS=-1` : "";
+    b.recurrence = [`RRULE:FREQ=${freq}${tail}`, ...(e.skip || []).map(d => e.time ? `EXDATE;TZID=${tz}:${d.replace(/-/g, "")}T${e.time.replace(":", "")}00` : `EXDATE;VALUE=DATE:${d.replace(/-/g, "")}`)];
   }
   return b;
 }
@@ -163,9 +179,14 @@ const meal = d => store.get("meals", d) || { pranzo: "", cena: "" };
 const lateTonight = () => !!store.get("settings", "late-" + TODAY)?.value;
 const bins = () => L("waste").sort((a, b) => (a.order || 0) - (b.order || 0));
 const wasteOn = d => { const dow = parse(d).getDay(); return bins().filter(b => (b.days || []).includes(dow)).map(b => b.name); };
-function questState(q) { const due = q.last ? diffDays(q.last, TODAY) - q.every : 0; return due < 0 ? "ok" : due === 0 ? "due" : "over"; }
+const snoozed = q => !!q.snooze && q.snooze > TODAY;
+function questState(q) { if (snoozed(q)) return "ok"; const due = q.last ? diffDays(q.last, TODAY) - q.every : 0; return due < 0 ? "ok" : due === 0 ? "due" : "over"; }
 function roomState(r) { const st = r.quests.map(questState); return st.includes("over") ? "over" : st.includes("due") ? "due" : "clean"; }
 const dueQuests = () => rooms().flatMap(r => r.quests.filter(q => questState(q) !== "ok").map(q => ({ ...q, room: r })));
+/* "Solo le mie": quest affidate a me o a chiunque. Vale solo su questo telefono. */
+const onlyMine = () => !!LS.get("regno.mine");
+const mineFilter = q => !onlyMine() || !q.assignee || q.assignee === me();
+const mineToggle = () => `<button class="minebtn" role="switch" aria-checked="${onlyMine()}" data-action="mine">Solo le mie</button>`;
 const daysLeft = p => p.expires ? diffDays(TODAY, p.expires) : null;
 
 /* ---------- Ricette ---------- */
@@ -193,6 +214,28 @@ function allRecipes() {
   const mine = Object.values(own).filter(r => !r._deleted && !r.id.startsWith("b_")).map(r => ({ ...clean(r), id: r.id }));
   return [...base, ...mine].filter(r => !r.hidden && r.n);
 }
+/* Reparti, nell'ordine in cui si gira il supermercato */
+const REPARTI = [["frutta", "🥬", "Frutta e verdura"], ["pane", "🥖", "Pane e forno"], ["frigo", "🧀", "Banco frigo"], ["carne", "🥩", "Carne e pesce"],
+  ["dispensa", "🍝", "Pasta e dispensa"], ["surgelati", "❄️", "Surgelati"], ["bevande", "🥤", "Bevande"], ["casa", "🧽", "Casa e pulizia"], ["persona", "🧴", "Cura della persona"], ["altro", "🧺", "Altro"]];
+/* L'ordine conta: le voci più specifiche vengono prima */
+const REP_KW = [
+  ["surgelati", "surgelat gelat bastoncini minestrone sofficini cornetti_surgelati"],
+  ["casa", "detersiv ammorbident candeggin varechina spugn sacchett sacchi carta_igienica carta_cucina scottex tovaglioli pellicola alluminio brillantante pastiglie lavastoviglie sgrassat anticalcare piatti_di_carta lavatrice sapone_piatti svelto scope panno panni insetticida"],
+  ["persona", "shampoo balsamo bagnoschiuma docciaschiuma dentifric spazzolin collutorio deodorant sapone cotton assorbent rasoi lamette crema cerotti fazzoletti"],
+  ["frigo", "latte yogurt yoghurt burro mozzarell burrata stracciatella ricotta formagg parmigian grana pecorin provol stracchino scamorza caciocavallo prosciutt salame mortadell speck pancett bresaola uova uovo panna wurstel affettat philadelphia"],
+  ["carne", "carne pollo petto tacchino manzo vitello maiale agnello salsicc macinat bistecc hamburger fettin braciol involtini pesce salmone merluzz orata spigola gamber cozze vongole polpo seppi calamar alici acciughe_fresche"],
+  ["frutta", "mela mele pera pere banan arance arancia mandarin clementin limon insalat lattuga rucola pomodor pomodorini patat cipoll aglio carot zucchin zucca melanzan peperon cime_di_rapa rape cicori fave finocch spinac broccol cavol cavolfior fungh frutta verdur sedano prezzemol basilico uva fragol kiwi pesche albicocc avocado cetriol ciliegie anguria melone fichi lampone mirtill"],
+  ["pane", "pane panin focacc crackers cracker grissin fette_biscottate taralli frisell piadin pancarré pan_carré tramezzin"],
+  ["bevande", "acqua vino birra succo succhi coca aranciata bibit tè_freddo spremuta gassosa"],
+  ["dispensa", "pasta spaghett orecchiett penne fusill rigaton linguine tagliatell lasagne riso farina zucchero sale olio aceto passata pelati polpa tonno legumi ceci lenticchi fagiol caffè caffe tè the tisan camomill biscott cereali fette marmellat confettur miele nutella sugo brodo dado spezie pepe origano lievito pangrattato cacao cioccolat merendin crostatin capperi olive sottaceti maionese ketchup senape"]
+].map(([k, w]) => [k, w.split(" ").map(x => x.replace(/_/g, " "))]);
+function guessRep(name) {
+  const t = name.toLowerCase().trim(), words = t.split(/[^a-zàèéìòù]+/).filter(Boolean);
+  for (const [k, kws] of REP_KW) if (kws.some(kw => kw.includes(" ") ? t.includes(kw) : words.some(w => w.startsWith(kw)))) return k;
+  return "altro";
+}
+/* Una scelta fatta a mano viene ricordata per la prossima volta, su entrambi i telefoni */
+const repOf = s => s.rep || store.get("settings", "rep:" + s.name.toLowerCase().trim())?.value || guessRep(s.name);
 const clean = r => { const { _t, _deleted, ...x } = r; return x; };
 const has = name => L("pantry").some(p => p.name.toLowerCase() === name && (daysLeft(p) === null || daysLeft(p) >= 0));
 const missing = r => (r.i || []).map(x => x.toLowerCase()).filter(x => !STAPLES.has(x) && !has(x));
@@ -206,6 +249,20 @@ const quickMeal = (excl = new Set()) => allRecipes().filter(r => (r.min || 99) <
 const logIt = (type, name, count = 1) => store.put("log", "l_" + uid(), { type, name, count, date: TODAY, by: me() });
 
 /* ---------- Casa nuova ---------- */
+/* Calendario della raccolta di casa (0 = domenica, 1 = lunedì…) */
+const RACCOLTA = [["umido", "Umido", [1, 3, 5]], ["plastica", "Plastica", [2, 5]], ["carta", "Carta", [4]], ["secco", "Secco", [4]]];
+/* Le case fondate con il calendario di esempio passano a quello vero, una volta sola e solo se non è stato modificato. */
+function migrateWaste() {
+  if (!store || store.get("settings", "waste-v2")) return;
+  const old = { umido: [1, 4], plastica: [3], carta: [5], vetro: [2], indiff: [6] };
+  const cur = bins();
+  const untouched = cur.length === 5 && cur.every(b => JSON.stringify([...(b.days || [])].sort()) === JSON.stringify(old[b.id]));
+  if (untouched) {
+    ["vetro", "indiff"].forEach(id => store.del("waste", id));
+    RACCOLTA.forEach(([id, name, days], i) => store.put("waste", id, { name, days, order: i }));
+  }
+  store.put("settings", "waste-v2", { value: true });
+}
 function seedHouse(s, { n1, n2, demo }) {
   const T = TODAY;
   s.put("players", "p1", { name: n1 || "Giocatore 1" });
@@ -218,8 +275,7 @@ function seedHouse(s, { n1, n2, demo }) {
     ["soggiorno", "Spolverare", 7, -2, 10], ["bagno", "Pulire il bagno", 7, -8, 25], ["bagno", "Cambiare gli asciugamani", 4, -2, 5],
     ["camera", "Cambiare le lenzuola", 7, -7, 15], ["studio", "Riordinare la scrivania", 7, -1, 10]];
   Q.forEach(([roomId, title, every, last, xp]) => s.put("quests", "q_" + uid(), { roomId, title, every, last: demo ? addDays(T, last) : null, xp }));
-  [["umido", "Umido", [1, 4]], ["plastica", "Plastica", [3]], ["carta", "Carta", [5]], ["vetro", "Vetro", [2]], ["indiff", "Indifferenziato", [6]]]
-    .forEach(([id, name, days], i) => s.put("waste", id, { name, days, order: i }));
+  RACCOLTA.forEach(([id, name, days], i) => s.put("waste", id, { name, days, order: i }));
   if (!demo) return;
   [["Palestra", 0, "18:30", "attività", false], ["Dentista", 1, "17:00", "evento", false], ["Turno in negozio", 2, "21:00", "attività", true], ["Serata giochi da tavolo", 4, "21:00", "evento", false]]
     .forEach(([title, d, time, type, late]) => s.put("events", "e_" + uid(), { title, date: addDays(T, d), time, type, late }));
@@ -248,7 +304,7 @@ async function boot() {
   const intent = LS.get(K.intent);
   if (intent) { LS.del(K.intent); if (G.currentToken()) await runIntent(intent); }
   render();
-  if (store) { scheduleReminders(); if (syncer) doSync(); }
+  if (store) { migrateWaste(); scheduleReminders(); if (syncer) doSync(); }
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && store) { refreshDay(); if (syncer) doSync(); } });
   setInterval(() => { if (store && syncer && document.visibilityState === "visible") doSync(); }, 5 * 60e3);
 }
@@ -425,7 +481,7 @@ function vWelcome() {
 const extRow = e => `<div class="row extrow"><span class="ext" style="--c:${esc(e.color)}" aria-hidden="true"></span><div class="grow"><div class="t">${esc(e.title)}</div>
   <div class="m">${e.allDay ? "Tutto il giorno" : `${esc(e.time)}–${esc(e.endTime)}`}, ${esc(e.calName)}</div></div></div>`;
 function vOggi() {
-  const al = alerts(), ev = eventsOn(TODAY), m = meal(TODAY), qs = dueQuests().slice(0, 5);
+  const al = alerts(), ev = eventsOn(TODAY), m = meal(TODAY), allQs = dueQuests().filter(mineFilter), qs = allQs.slice(0, 6);
   return `
   <h2>Salve, ${esc(pname(me()))}</h2>
   <p class="sub">${esc(fmtLong(TODAY))}</p>
@@ -435,17 +491,19 @@ function vOggi() {
   </div></div>`).join("") || `<p class="empty">Nessun avviso. Il regno è in pace.</p>`}
   <div class="late"><div><div style="font-weight:800">Rientro tardi stasera</div><div style="font-size:.86rem;color:var(--muted)">Ti propongo un pasto rapido</div></div>
     <button class="switch" role="switch" aria-checked="${lateTonight()}" data-action="toggle-late" aria-label="Rientro tardi stasera"></button></div>
-  <h3>Quest di oggi</h3>
+  <div class="h3row"><h3>Quest di oggi</h3>${mineToggle()}</div>
   <div class="panel">${qs.map(q => `<div class="row">
     <button class="chk" data-action="quest" data-v="${q.id}" aria-label="Completa ${esc(q.title)}"></button>
     <div class="grow"><div class="t">${esc(q.title)}</div><div class="m">${q.room.e} ${esc(q.room.name)}${q.assignee ? `, tocca a ${esc(pname(q.assignee))}` : ""}</div></div>
-    <span class="tag ${questState(q) === "over" ? "rose" : "amber"}">+${q.xp} XP</span></div>`).join("") || `<p class="empty">Tutte le quest sono completate.</p>`}</div>
+    <span class="tag ${questState(q) === "over" ? "rose" : "amber"}">+${q.xp} XP</span>
+    <button class="btn ghost small" data-action="quest-skip" data-v="${q.id}" aria-label="Rimanda a domani: ${esc(q.title)}">Domani</button></div>`).join("") || `<p class="empty">${onlyMine() ? "Nessuna quest per te oggi." : "Tutte le quest sono completate."}</p>`}
+    ${allQs.length > qs.length ? `<p class="note">E altre ${allQs.length - qs.length} sulla mappa del castello.</p>` : ""}</div>
   <h3>In agenda</h3>
   <div class="panel">
     <div class="row"><div class="grow"><div class="m">Pranzo</div><div class="t">${esc(m.pranzo || "Da decidere")}</div></div></div>
     <div class="row"><div class="grow"><div class="m">Cena</div><div class="t">${esc(m.cena || "Da decidere")}</div></div></div>
     ${birthdaysOn(TODAY).map(b => `<div class="row"><div class="grow"><div class="t">🎂 Genetliaco di ${esc(b.name)}</div><div class="m">${bdAge(b, TODAY) ? `compie ${bdAge(b, TODAY)} anni` : "oggi"}</div></div></div>`).join("")}
-    ${ev.map(e => `<div class="row"><div class="grow"><div class="t">${esc(e.title)}</div><div class="m">${esc(e.time || "Tutto il giorno")}${e.late ? ", rientro tardi" : ""}</div></div><span class="tag">${esc(e.type)}</span></div>`).join("")}
+    ${ev.map(e => `<div class="row"><div class="grow"><button class="name t" data-action="ev-edit" data-v="${e.id}" data-day="${TODAY}" style="background:none;border:0;padding:0;text-align:left;font-weight:700">${esc(e.title)}</button><div class="m">${esc(e.time || "Tutto il giorno")}${e.late ? ", rientro tardi" : ""}${repLabel(e.repeat) ? ", " + repLabel(e.repeat) : ""}</div></div><span class="tag">${esc(e.type)}</span></div>`).join("")}
     ${extOn(TODAY).map(extRow).join("")}
   </div>`;
 }
@@ -472,10 +530,11 @@ function vSettimana() {
   </div>
   <h3>Eventi e attività</h3>
   <div class="panel">${birthdaysOn(selDay).map(b => `<div class="row"><div class="grow"><div class="t">🎂 Genetliaco di ${esc(b.name)}</div><div class="m">${bdAge(b, selDay) ? `compie ${bdAge(b, selDay)} anni` : "tutto il giorno"}</div></div>
-    <button class="btn ghost small" data-action="bd-edit" data-v="${b.id}">Apri</button></div>`).join("")}${ev.map(e => `<div class="row"><div class="grow"><div class="t">${esc(e.title)}</div>
-    <div class="m">${esc(e.time || "Tutto il giorno")}${e.late ? ", rientro tardi" : ""}${e.repeat === "weekly" ? ", ogni settimana" : ""}</div></div>
+    <button class="btn ghost small" data-action="bd-edit" data-v="${b.id}">Apri</button></div>`).join("")}${ev.map(e => `<div class="row"><div class="grow"><button class="name t" data-action="ev-edit" data-v="${e.id}" data-day="${selDay}" style="background:none;border:0;padding:0;text-align:left;font-weight:700">${esc(e.title)}</button>
+    <div class="m">${esc(e.time || "Tutto il giorno")}${e.late ? ", rientro tardi" : ""}${repLabel(e.repeat) ? ", " + repLabel(e.repeat) : ""}</div></div>
     <span class="tag ${e.type === "evento" ? "teal" : ""}">${esc(e.type)}</span>
     <button class="btn ghost small" data-action="ev-del" data-v="${e.id}" aria-label="Elimina ${esc(e.title)}">✕</button></div>`).join("")}${extOn(selDay).map(extRow).join("")}${!ev.length && !extOn(selDay).length && !birthdaysOn(selDay).length ? `<p class="empty">Giornata libera.</p>` : ""}</div>
+  ${ev.length ? `<p class="note">Tocca il nome di un impegno per modificarlo.</p>` : ""}
   ${ext.error && calReady() ? `<p class="note">Calendari Google non raggiungibili: ${esc(ext.error)}</p>` : ""}
   <h3>Aggiungi</h3>
   <div class="form">
@@ -483,7 +542,7 @@ function vSettimana() {
     <input class="field" id="evh" type="time" aria-label="Ora">
     <select class="field" id="evk" aria-label="Tipo"><option value="evento">Evento</option><option value="attività">Attività</option></select>
     <button class="btn" data-action="ev-add">Aggiungi</button>
-    <label class="inline full"><input type="checkbox" id="evr"> Ogni settimana, in questo giorno</label>
+    <select class="field full" id="evr" aria-label="Ripeti">${REPEAT.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>
     <label class="inline full"><input type="checkbox" id="evl"> Rientro tardi (ti propongo un pasto rapido)</label>
   </div>
   <h3>Genetliaci in arrivo</h3>
@@ -510,10 +569,10 @@ function vSpesa() {
   </div>
   ${spesaTab === "ricette" ? vRicette() : spesaTab === "lista" ? `
     <div class="addbar"><input id="shop-in" placeholder="Aggiungi alla lista" enterkeyhint="done"><button class="btn" data-action="shop-add">Aggiungi</button></div>
-    <div class="panel">${shop.map(s => `<div class="row">
-      <button class="chk ${s.done ? "on" : ""}" data-action="shop-toggle" data-v="${s.id}" aria-label="${s.done ? "Segna da prendere" : "Segna preso"}: ${esc(s.name)}">${s.done ? "✓" : ""}</button>
-      <div class="grow"><div class="t" style="${s.done ? "text-decoration:line-through;opacity:.55" : ""}">${esc(s.name)}</div></div>
-      <button class="btn ghost small" data-action="shop-del" data-v="${s.id}" aria-label="Elimina ${esc(s.name)}">✕</button></div>`).join("") || `<p class="empty">Lista vuota. Aggiungi quello che manca.</p>`}</div>
+    ${shop.length ? REPARTI.map(([k, ic, n]) => { const items = shop.filter(s => !s.done && repOf(s) === k); return items.length ? `<p class="rep"><span aria-hidden="true">${ic}</span> ${n}</p>
+    <div class="panel">${items.map(shopRow).join("")}</div>` : ""; }).join("") : `<div class="panel"><p class="empty">Lista vuota. Aggiungi quello che manca.</p></div>`}
+    ${done ? `<p class="rep">✓ Già nel carrello</p><div class="panel">${shop.filter(s => s.done).map(shopRow).join("")}</div>` : ""}
+    ${shop.length ? `<p class="note">I reparti seguono il giro del supermercato. Tocca un articolo per spostarlo: il Regno se lo ricorda.</p>` : ""}
     ${done ? `<p style="margin-top:12px"><button class="btn" data-action="shop-stash">Metti in dispensa i ${done} presi</button></p>` : ""}
   ` : `
     <div class="addbar"><input id="pan-in" placeholder="Nuovo oggetto"><input id="pan-exp" type="date" aria-label="Scadenza" style="flex:0 0 150px"><button class="btn" data-action="pan-add" aria-label="Aggiungi alla dispensa">+</button></div>
@@ -523,6 +582,16 @@ function vSpesa() {
   `}`;
 }
 
+const shopRow = s => `<div class="row">
+      <button class="chk ${s.done ? "on" : ""}" data-action="shop-toggle" data-v="${s.id}" aria-label="${s.done ? "Segna da prendere" : "Segna preso"}: ${esc(s.name)}">${s.done ? "✓" : ""}</button>
+      <div class="grow"><button class="name t" data-action="shop-rep" data-v="${s.id}" style="background:none;border:0;padding:0;text-align:left;font-weight:700;${s.done ? "text-decoration:line-through;opacity:.55" : ""}">${esc(s.name)}</button></div>
+      <button class="btn ghost small" data-action="shop-del" data-v="${s.id}" aria-label="Elimina ${esc(s.name)}">✕</button></div>`;
+function shopRepSheet(id) {
+  const s = store.get("shopping", id); if (!s) return closeSheet(); const cur = repOf(s);
+  openSheet(`<h2>${esc(s.name)}</h2><p class="sub">In quale reparto lo trovate?</p>
+  <div class="chipset">${REPARTI.map(([k, ic, n]) => `<button type="button" aria-pressed="${k === cur}" data-action="shop-rep-set" data-k="${k}" data-v="${id}">${ic} ${n}</button>`).join("")}</div>
+  <div class="stack" style="margin-top:14px"><input class="field" id="sr-n" value="${esc(s.name)}" aria-label="Nome articolo"><button class="btn" data-action="shop-rename" data-v="${id}">Salva il nome</button></div>`);
+}
 function vRicette() {
   const q = (LS.get("regno.rq") || "").toLowerCase();
   const list = allRecipes().filter(r => !q || r.n.toLowerCase().includes(q) || (r.i || []).some(x => x.toLowerCase().includes(q)))
@@ -745,14 +814,14 @@ function houseContext() {
   return {
     oggi: TODAY, giocatori: players().map(p => ({ id: p.id, nome: p.name })), chi_scrive: pname(me()), rientro_tardi_stasera: lateTonight(),
     prossimi_7_giorni: wk.map(d => ({ data: d, giorno: fmtLong(d), pasti: { pranzo: meal(d).pranzo || "", cena: meal(d).cena || "" }, raccolta: wasteOn(d),
-      impegni: eventsOn(d).map(e => ({ ora: e.time, titolo: e.title, tipo: e.type, rientro_tardi: e.late })),
+      impegni: eventsOn(d).map(e => ({ ora: e.time, titolo: e.title, tipo: e.type, rientro_tardi: e.late, ricorrenza: repLabel(e.repeat) || "una volta" })),
       impegni_dai_calendari: extOn(d).map(e => ({ ora: e.allDay ? "tutto il giorno" : `${e.time}-${e.endTime}`, titolo: e.title })),
       genetliaci: birthdaysOn(d).map(b => b.name) })),
     stanze: rooms().map(r => r.name),
     genetliaci_prossimi: upcomingBirthdays(60).map(b => ({ nome: b.name, data: b.next, anni: bdAge(b, b.next), note: b.note || "" })),
     dispensa: L("pantry").map(p => ({ nome: p.name, giorni_alla_scadenza: daysLeft(p) })),
     lista_spesa: L("shopping").filter(s => !s.done).map(s => s.name),
-    faccende: rooms().flatMap(r => r.quests.map(q => ({ id: q.id, stanza: r.name, compito: q.title, ogni_giorni: q.every, stato: questState(q), affidata_a: q.assignee || null }))),
+    faccende: rooms().flatMap(r => r.quests.map(q => ({ id: q.id, stanza: r.name, compito: q.title, ogni_giorni: q.every, stato: questState(q), rimandata_a: snoozed(q) ? q.snooze : null, affidata_a: q.assignee || null }))),
   };
 }
 function buildPrompt(question) {
@@ -888,20 +957,24 @@ function throneSheet() {
 function openSheet(html) { $("#sheet-body").innerHTML = `<div class="grab"></div>${html}`; $("#sheet").classList.add("open"); $("#scrim").classList.add("open"); }
 function closeSheet() { $("#sheet").classList.remove("open"); $("#scrim").classList.remove("open"); }
 function roomSheet(id) {
-  const r = rooms().find(x => x.id === id);
-  openSheet(`<h2>${r.e} ${esc(r.name)}</h2><p class="sub">Quest ricorrenti di questa stanza.</p>
-  <div class="panel">${r.quests.map(q => { const st = questState(q), next = q.last ? addDays(q.last, q.every) : TODAY;
+  const r = rooms().find(x => x.id === id); if (!r) return closeSheet();
+  const list = r.quests.filter(mineFilter), hidden = r.quests.length - list.length;
+  openSheet(`<h2>${r.e} ${esc(r.name)}</h2><div class="h3row"><p class="sub" style="margin:0">Quest ricorrenti di questa stanza.</p>${mineToggle().replace('data-action="mine"', `data-action="mine" data-room="${r.id}"`)}</div>
+  <div class="panel">${list.map(q => { const st = questState(q), zz = snoozed(q), next = zz ? q.snooze : q.last ? addDays(q.last, q.every) : TODAY;
     return `<div class="row"><button class="chk" data-action="quest" data-v="${q.id}" data-room="${r.id}" aria-label="Completa ${esc(q.title)}"></button>
-    <div class="grow"><button class="name t" data-action="quest-edit" data-v="${q.id}" style="background:none;border:0;padding:0;text-align:left;font-weight:700">${esc(q.title)}</button><div class="m">Ogni ${q.every === 1 ? "giorno" : q.every + " giorni"}${q.assignee ? `, tocca a ${esc(pname(q.assignee))}` : ""}${st === "ok" ? `, prossima ${esc(fmtLong(next))}` : ""}</div></div>
-    <span class="tag ${st === "over" ? "rose" : st === "due" ? "amber" : "teal"}">${st === "ok" ? "fatta" : st === "due" ? "oggi" : "in ritardo"}</span>
-    <button class="btn ghost small" data-action="quest-del" data-v="${q.id}" data-room="${r.id}" aria-label="Elimina ${esc(q.title)}">✕</button></div>`; }).join("") || `<p class="empty">Nessuna quest.</p>`}</div>
-  <p class="note">Tocca il nome di una quest per modificarla.</p>
+    <div class="grow"><button class="name t" data-action="quest-edit" data-v="${q.id}" style="background:none;border:0;padding:0;text-align:left;font-weight:700">${esc(q.title)}</button><div class="m">Ogni ${q.every === 1 ? "giorno" : q.every + " giorni"}${q.assignee ? `, tocca a ${esc(pname(q.assignee))}` : ""}${st === "ok" ? `, ${zz ? "rimandata a" : "prossima"} ${esc(fmtLong(next))}` : ""}</div></div>
+    <span class="tag ${st === "over" ? "rose" : st === "due" ? "amber" : "teal"}">${zz ? "rimandata" : st === "ok" ? "fatta" : st === "due" ? "oggi" : "in ritardo"}</span>
+    ${zz ? `<button class="btn ghost small" data-action="quest-unskip" data-v="${q.id}" data-room="${r.id}" aria-label="Riporta a oggi: ${esc(q.title)}">Oggi</button>`
+      : st !== "ok" ? `<button class="btn ghost small" data-action="quest-skip" data-v="${q.id}" data-room="${r.id}" aria-label="Rimanda a domani: ${esc(q.title)}">Domani</button>` : ""}
+    <button class="btn ghost small" data-action="quest-del" data-v="${q.id}" data-room="${r.id}" aria-label="Elimina ${esc(q.title)}">✕</button></div>`; }).join("") || `<p class="empty">Nessuna quest${hidden ? " per te" : ""}.</p>`}</div>
+  ${hidden ? `<p class="note">${hidden === 1 ? "Una quest è affidata" : `${hidden} quest sono affidate`} all'altra persona.</p>` : ""}
+  <p class="note">Tocca il nome di una quest per modificarla. "Domani" la rimanda senza far arrossire lo stemma.</p>
   <p style="margin-top:10px"><button class="btn" data-action="quest-new" data-v="${r.id}">Nuova quest in questa stanza</button></p>`);
 }
 const EVERY = [[1, "ogni giorno"], [2, "ogni 2 giorni"], [3, "ogni 3 giorni"], [7, "ogni settimana"], [14, "ogni 2 settimane"], [30, "ogni mese"]];
 const EFFORT = [[5, "Leggera"], [15, "Media"], [25, "Impegnativa"]];
 function quickAddSheet() {
-  const T = [["quest", "🛡️", "Quest", "Una faccenda ricorrente"], ["evento", "📜", "Impegno", "In agenda, anche ogni settimana"], ["pasto", "🍽️", "Pasto", "Pranzo o cena di un giorno"],
+  const T = [["quest", "🛡️", "Quest", "Una faccenda ricorrente"], ["evento", "📜", "Impegno", "Anche ogni settimana, mese o anno"], ["pasto", "🍽️", "Pasto", "Pranzo o cena di un giorno"],
     ["spesa", "🧺", "Spesa", "Uno o più articoli in lista"], ["dispensa", "🥫", "Dispensa", "Con la scadenza"], ["ricetta", "🍲", "Ricetta", "Nel ricettario"],
     ["genetliaco", "🎂", "Genetliaco", "Con promemoria"], ["stanza", "🚪", "Stanza", "Nuova area del castello"]];
   openSheet(`<h2>Cosa aggiungiamo?</h2><div class="qa">${T.map(([v, i, n, d]) => `<button data-action="qa" data-v="${v}"><i aria-hidden="true">${i}</i><b>${n}</b><span>${d}</span></button>`).join("")}</div>`);
@@ -927,14 +1000,23 @@ function questForm(id, roomId) {
     ${id ? `<button class="btn ghost" data-action="quest-del" data-v="${id}" data-room="${q.roomId}">Elimina quest</button>` : ""}
   </div>`);
 }
-function eventForm() {
-  openSheet(`<h2>Nuovo impegno</h2><div class="stack">
-    <input class="field" id="ef-t" placeholder="Cosa? (es. Dentista)">
-    <div class="form"><input class="field" id="ef-d" type="date" value="${selDay < TODAY ? TODAY : selDay}" aria-label="Giorno"><input class="field" id="ef-h" type="time" aria-label="Ora"></div>
-    <select class="field" id="ef-k" aria-label="Tipo"><option value="evento">Evento</option><option value="attività">Attività</option></select>
-    <label class="checkrow"><input type="checkbox" id="ef-r"> Ogni settimana</label>
-    <label class="checkrow"><input type="checkbox" id="ef-l"> Rientro tardi</label>
-    <button class="btn" data-action="ef-save">Aggiungi</button></div>`);
+function eventForm(id, day) {
+  const e = id ? store.get("events", id) : { title: "", date: selDay < TODAY ? TODAY : selDay, time: "", type: "evento", late: false, repeat: "none" };
+  if (!e) return closeSheet();
+  const rep = e.repeat && e.repeat !== "none";
+  openSheet(`<h2>${id ? "Modifica impegno" : "Nuovo impegno"}</h2><div class="stack">
+    <input class="field" id="ef-t" placeholder="Cosa? (es. Dentista, bolletta luce)" value="${esc(e.title)}">
+    <p class="lbl">${rep ? "Primo giorno della serie e ora" : "Giorno e ora"}</p>
+    <div class="form"><input class="field" id="ef-d" type="date" value="${esc(e.date)}" aria-label="Giorno"><input class="field" id="ef-h" type="time" value="${esc(e.time || "")}" aria-label="Ora"></div>
+    <select class="field" id="ef-k" aria-label="Tipo"><option value="evento" ${e.type === "evento" ? "selected" : ""}>Evento</option><option value="attività" ${e.type === "attività" ? "selected" : ""}>Attività</option></select>
+    <p class="lbl">Si ripete</p>
+    <select class="field" id="ef-r" aria-label="Ripeti">${REPEAT.map(([v, l]) => `<option value="${v}" ${(e.repeat || "none") === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+    <label class="checkrow"><input type="checkbox" id="ef-l" ${e.late ? "checked" : ""}> Rientro tardi</label>
+    <button class="btn" data-action="ef-save" data-v="${id || ""}">${id ? "Salva" : "Aggiungi"}</button>
+    ${id ? `${rep ? `<p class="note">Le modifiche valgono per tutta la serie.</p>
+      <button class="btn ghost" data-action="ev-skip" data-v="${id}" data-day="${day || ""}">Togli solo il ${esc(fmtShort(day || e.date))}</button>` : ""}
+      <button class="btn ghost" data-action="ev-delall" data-v="${id}">${rep ? "Elimina tutta la serie" : "Elimina"}</button>` : ""}
+  </div>`);
 }
 function mealForm() {
   openSheet(`<h2>Pasto</h2><div class="stack">
@@ -1096,11 +1178,15 @@ async function handleClick(e) {
     case "set-dinner": store.put("meals", TODAY, { cena: v }); toast("Cena di stasera aggiornata"); break;
     case "pantry-del": { const p = store.get("pantry", v); if (p && daysLeft(p) !== null && daysLeft(p) < 0) logIt("spreco", p.name); store.del("pantry", v); toast("Rimosso dall'inventario"); break; }
     /* quest */
-    case "quest": { const q = store.get("quests", v); store.put("quests", v, { last: TODAY }); store.addXP(me(), q.xp, "quest:" + v);
+    case "quest": { const q = store.get("quests", v); store.put("quests", v, { last: TODAY, snooze: null }); store.addXP(me(), q.xp, "quest:" + v);
       const r = rooms().find(x => x.id === q.roomId); toast(r && roomState(r) === "clean" ? `+${q.xp} XP, ${r.name} torna d'oro` : `+${q.xp} XP`);
       if (b.dataset.room) roomSheet(b.dataset.room); break; }
     case "quest-add": { const t = $("#q-t").value.trim(), n = Math.max(1, parseInt($("#q-e").value) || 7); if (!t) return;
       store.put("quests", "q_" + uid(), { roomId: v, title: t, every: n, last: null, xp: Math.min(30, 5 + n) }); roomSheet(v); break; }
+    case "quest-skip": { const q = store.get("quests", v); store.put("quests", v, { snooze: addDays(TODAY, 1) });
+      toast(`${q.title}: rimandata a domani`); if (b.dataset.room) roomSheet(b.dataset.room); break; }
+    case "quest-unskip": store.put("quests", v, { snooze: null }); if (b.dataset.room) roomSheet(b.dataset.room); break;
+    case "mine": LS.set("regno.mine", !onlyMine()); render(); if (b.dataset.room) roomSheet(b.dataset.room); break;
     case "quest-del": if (confirm("Eliminare questa quest?")) { store.del("quests", v); b.dataset.room ? roomSheet(b.dataset.room) : closeSheet(); } break;
     case "room": roomSheet(v); break;
     case "pan-edit": { const it = store.get("pantry", v);
@@ -1119,10 +1205,16 @@ async function handleClick(e) {
     case "day": selDay = v; render(); break;
     case "shift": selDay = addDays(selDay, Number(v)); render(); break;
     case "ev-add": { const t = $("#evt").value.trim(); if (!t) { $("#evt").focus(); return; }
-      store.put("events", "e_" + uid(), { date: selDay, time: $("#evh").value, title: t, type: $("#evk").value, late: $("#evl").checked, repeat: $("#evr").checked ? "weekly" : "none" }); toast("Aggiunto"); break; }
-    case "ev-del": { const e = store.get("events", v);
-      if (e.repeat === "weekly" && e.date !== selDay && !confirm("Evento settimanale. OK elimina tutta la serie, Annulla toglie solo questo giorno.")) store.put("events", v, { skip: [...(e.skip || []), selDay] });
+      store.put("events", "e_" + uid(), { date: selDay, time: $("#evh").value, title: t, type: $("#evk").value, late: $("#evl").checked, repeat: $("#evr").value || "none" }); toast("Aggiunto"); break; }
+    case "ev-del": { const e = store.get("events", v), rep = e.repeat && e.repeat !== "none";
+      if (rep && e.date !== selDay && !confirm(`Impegno che si ripete ${repLabel(e.repeat)}. OK elimina tutta la serie, Annulla toglie solo questo giorno.`)) store.put("events", v, { skip: [...(e.skip || []), selDay] });
       else store.del("events", v); break; }
+    case "ev-edit": eventForm(v, b.dataset.day); break;
+    case "ev-skip": { const e = store.get("events", v), d = b.dataset.day || e.date;
+      if (d === e.date) { const nx = [...Array(800)].map((_, i) => addDays(d, i + 1)).find(x => occurs(e, x)); if (nx) store.put("events", v, { date: nx }); else store.del("events", v); }
+      else store.put("events", v, { skip: [...(e.skip || []), d] });
+      closeSheet(); toast("Tolto solo quel giorno"); break; }
+    case "ev-delall": if (confirm("Eliminare questo impegno?")) { store.del("events", v); closeSheet(); toast("Impegno eliminato"); } break;
     /* spesa */
     case "spesa-tab": spesaTab = v; render(); break;
     case "rec-new": recipeEdit(null); break;
@@ -1146,8 +1238,8 @@ async function handleClick(e) {
       toast(n ? `${n} ${n === 1 ? "piatto salvato" : "piatti salvati"} nel ricettario` : "Sono già tutti nel ricettario"); break; }
     case "throne": throneSheet(); break;
     case "quick-add": quickAddSheet(); break;
-    case "qa": ({ quest: () => questForm(null), evento: eventForm, pasto: mealForm, spesa: shopForm, dispensa: pantryForm,
-      ricetta: () => recipeEdit(null), genetliaco: () => bdForm(null), stanza: roomsSheet })[v](); break;
+    case "qa": ({ quest: () => questForm(null), pasto: mealForm, spesa: shopForm, dispensa: pantryForm,
+      evento: () => eventForm(null), ricetta: () => recipeEdit(null), genetliaco: () => bdForm(null), stanza: roomsSheet })[v](); break;
     case "quest-new": questForm(null, v); break;
     case "quest-edit": questForm(v); break;
     case "qf-every": $("#qf-e").value = v; document.querySelectorAll('[data-action="qf-every"]').forEach(x => x.setAttribute("aria-pressed", x.dataset.v === v)); break;
@@ -1156,8 +1248,9 @@ async function handleClick(e) {
       if (v) { store.put("quests", v, f); } else store.put("quests", "q_" + uid(), f);
       roomSheet(f.roomId); toast(v ? "Quest aggiornata" : "Nuova quest nel castello"); break; }
     case "ef-save": { const t = $("#ef-t").value.trim(); if (!t) { $("#ef-t").focus(); return; }
-      store.put("events", "e_" + uid(), { date: $("#ef-d").value || TODAY, time: $("#ef-h").value, title: t, type: $("#ef-k").value, late: $("#ef-l").checked, repeat: $("#ef-r").checked ? "weekly" : "none" });
-      closeSheet(); toast("Impegno aggiunto"); break; }
+      const f = { date: $("#ef-d").value || TODAY, time: $("#ef-h").value, title: t, type: $("#ef-k").value, late: $("#ef-l").checked, repeat: $("#ef-r").value || "none" };
+      if (v) { const old = store.get("events", v); if (old?.date !== f.date || old?.repeat !== f.repeat) f.skip = []; }
+      store.put("events", v || "e_" + uid(), f); closeSheet(); toast(v ? "Impegno aggiornato" : "Impegno aggiunto"); break; }
     case "mf-save": { const n = $("#mf-n").value.trim(); if (!n) return; store.put("meals", $("#mf-d").value || TODAY, { [$("#mf-p").value]: n }); closeSheet(); toast("Pasto in programma"); break; }
     case "sf-save": { const items = $("#sf-t").value.split(/[\n,]/).map(x => x.trim()).filter(Boolean); if (!items.length) return;
       const have = new Set(L("shopping").filter(s => !s.done).map(s => s.name.toLowerCase()));
@@ -1183,6 +1276,10 @@ async function handleClick(e) {
     case "shop-add": addShop(); break;
     case "shop-toggle": store.put("shopping", v, { done: !store.get("shopping", v).done }); break;
     case "shop-del": store.del("shopping", v); break;
+    case "shop-rep": shopRepSheet(v); break;
+    case "shop-rep-set": { const s = store.get("shopping", v), k = b.dataset.k; store.put("shopping", v, { rep: k });
+      store.put("settings", "rep:" + s.name.toLowerCase().trim(), { value: k }); closeSheet(); toast(`${s.name}: ${REPARTI.find(x => x[0] === k)[2]}`); break; }
+    case "shop-rename": { const n = $("#sr-n").value.trim(); if (n) store.put("shopping", v, { name: n, rep: null }); closeSheet(); break; }
     case "shop-stash": { const got = L("shopping").filter(s => s.done);
       got.forEach(s => { store.put("pantry", "p_" + uid(), { name: s.name, expires: null }); store.del("shopping", s.id); });
       logIt("spesa", got.map(s => s.name).join(", "), got.length); store.addXP(me(), 5 * got.length, "spesa"); toast(`${got.length} oggetti in inventario, +${5 * got.length} XP`); break; }

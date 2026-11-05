@@ -17,10 +17,10 @@ Ogni telefono ne tiene una copia completa e lavora offline; la sincronizzazione 
     "players":  { "p1": { "id": "p1", "name": "Rocco", "_deleted": false, "_t": { "name": "…", "_deleted": "…" } } },
     "events":   { "<id>": { "date": "2026-09-26", "time": "21:00", "title": "Turno in negozio", "type": "attività", "late": true } },
     "meals":    { "2026-09-24": { "pranzo": "Insalata di farro", "cena": "Pasta zucchine e ricotta" } },
-    "shopping": { "<id>": { "name": "Latte", "done": false } },
+    "shopping": { "<id>": { "name": "Latte", "done": false, "rep": "frigo" } },
     "pantry":   { "<id>": { "name": "Zucchine", "expires": "2026-09-25" } },
     "rooms":    { "cucina": { "name": "Cucina", "icon": "🍳", "order": 3 } },
-    "quests":   { "<id>": { "roomId": "cucina", "title": "Pulire il frigo", "every": 14, "last": "2026-09-04", "xp": 25 } },
+    "quests":   { "<id>": { "roomId": "cucina", "title": "Pulire il frigo", "every": 14, "last": "2026-09-04", "xp": 25, "snooze": null } },
     "waste":    { "umido": { "name": "Umido", "days": [1, 4] } },
     "xp":       { "xp_<timestamp>": { "player": "p1", "amount": 25, "reason": "quest:<id>", "date": "2026-09-24" } },
     "settings": { "household": { "name": "Il Regno di Cristallo" }, "late-2026-09-24": { "value": true } },
@@ -50,3 +50,11 @@ Nell'esempio i campi `id`, `_deleted` e `_t` sono mostrati solo sul primo record
 ## Pulizia
 
 Le tombstone più vecchie di 90 giorni, e già viste da entrambi i dispositivi (`lastSync` successivo), possono essere rimosse per tenere il file leggero.
+
+
+## Novità della 1.4
+- `events.repeat`: `"none"`, `"weekly"`, `"monthly"` o `"yearly"`. Mensile e annuale cadono nello stesso giorno; se il mese è più corto, l'ultimo giorno. `skip[]` toglie singole date.
+- `quests.snooze`: data (AAAA-MM-GG) fino alla quale la quest è rimandata. Fino a quel giorno conta come "in ordine". Completarla lo azzera.
+- `shopping.rep`: reparto scelto a mano (`frutta`, `pane`, `frigo`, `carne`, `dispensa`, `surgelati`, `bevande`, `casa`, `persona`, `altro`). Se manca, il reparto si indovina dal nome.
+- `settings["rep:<nome in minuscolo>"]`: `{ "value": "<reparto>" }`, il reparto ricordato per quell'articolo, condiviso tra i due telefoni.
+- Il filtro "Solo le mie" vale per singolo telefono e non entra nel file.
