@@ -4,7 +4,7 @@ import * as G from "./drive.js";
 import { deliver, askPermission, wasteICS, shareOrDownload } from "./notify.js";
 import * as C from "./calendar.js";
 
-export const VERSION = "1.4.0";
+export const VERSION = "1.4.1";
 
 /* ---------- Errori visibili: se qualcosa si rompe, lo si legge sullo schermo ---------- */
 function showError(msg) {
@@ -262,6 +262,18 @@ function migrateWaste() {
     RACCOLTA.forEach(([id, name, days], i) => store.put("waste", id, { name, days, order: i }));
   }
   store.put("settings", "waste-v2", { value: true });
+}
+/* Azzeramento: ogni voce diventa una cancellazione che si sincronizza, poi si rimette la casa iniziale */
+const KEEP_SETTINGS = new Set(["calendar", "household", "waste-v2"]);
+function resetHouse() {
+  for (const c of Object.keys(store.doc.data)) {
+    if (c === "players") continue;
+    for (const r of store.list(c)) if (!(c === "settings" && KEEP_SETTINGS.has(r.id))) store.del(c, r.id);
+  }
+  const ps = players();
+  /* Stanze e raccolta riusano gli stessi id: vanno "rianimate" esplicitamente */
+  seedHouse({ put: (c, id, f) => store.put(c, id, { ...f, _deleted: false }) }, { n1: ps[0]?.name, n2: ps[1]?.name, demo: false });
+  [K.chat, "regno.icloud", "regno.rq"].forEach(LS.del);
 }
 function seedHouse(s, { n1, n2, demo }) {
   const T = TODAY;
@@ -1143,6 +1155,11 @@ function settingsSheet() {
     <label class="btn ghost" style="text-align:center">Importa un file<input type="file" accept="application/json,.json" id="imp" hidden></label>
     <button class="btn ghost" data-action="leave">Scollega questo telefono</button>
   </div>
+  <h3>Ricomincia da capo</h3>
+  <p class="sub">Cancella impegni, pasti, spesa, dispensa, ricette vostre, genetliaci, punti e imprese. Restano i nomi dei giocatori, il collegamento a Drive e ai calendari. Stanze, quest e raccolta tornano quelle iniziali.</p>
+  <div class="stack"><input class="field" id="reset-word" placeholder='Scrivi AZZERA per confermare' autocomplete="off" autocapitalize="characters">
+    <button class="btn ghost danger" data-action="reset">Azzera il Regno</button></div>
+  <p class="note">Vale per entrambi i telefoni: all'altro arriva alla prossima sincronizzazione. Prima, se vuoi, esporta una copia di sicurezza.</p>
   <p class="note" style="text-align:center">Versione ${VERSION}</p>`);
 }
 
@@ -1173,6 +1190,8 @@ async function handleClick(e) {
     case "export": await shareOrDownload(`regno-di-cristallo-${TODAY}.json`, JSON.stringify(store.doc, null, 2), "application/json"); break;
     case "leave": if (confirm("Scollegare questo telefono? I dati restano sul file Drive, ma spariscono da qui.")) { [K.doc, K.file, K.me, K.chat, K.mode].forEach(LS.del); G.forgetToken(); location.reload(); } break;
     case "me": LS.set(K.me, v); render(); settingsSheet(); break;
+    case "reset": { if ($("#reset-word").value.trim().toUpperCase() !== "AZZERA") { toast("Scrivi AZZERA per confermare"); $("#reset-word").focus(); return; }
+      resetHouse(); closeSheet(); tab = "oggi"; render(); toast("Il Regno ricomincia da capo"); break; }
     /* oggi */
     case "toggle-late": store.put("settings", "late-" + TODAY, { value: !lateTonight() }); break;
     case "set-dinner": store.put("meals", TODAY, { cena: v }); toast("Cena di stasera aggiornata"); break;

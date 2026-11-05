@@ -277,3 +277,4 @@ nav.tabs button[aria-current="page"]::after{content:"";width:18px;height:2px;bac
 .minebtn[aria-checked="true"]{background:var(--amethyst);color:var(--on-primary);border-color:var(--amethyst)}
 .rep{margin:16px 0 6px;font-family:"Alegreya SC",Georgia,serif;font-weight:700;color:var(--muted);font-size:.92rem}
 .form .field.full{grid-column:1/-1}
+.btn.danger{color:var(--rose);border-color:color-mix(in srgb,var(--rose) 50%,transparent)}

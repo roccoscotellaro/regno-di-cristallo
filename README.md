@@ -183,3 +183,6 @@ Con un Apple ID gratuito l'app va reinstallata ogni 7 giorni.
 - **Rimandare una quest**: il pulsante "Domani" la sposta al giorno dopo senza far diventare rosso lo stemma. Dalla scheda della stanza, "Oggi" annulla il rinvio.
 - **Spesa per reparti**: la lista si divide da sola nel giro del supermercato. Tocca un articolo per cambiarne il reparto; la scelta resta per le volte successive, su entrambi i telefoni.
 - **Solo le mie**: in Oggi e nelle stanze mostra solo le quest affidate a te o a chiunque.
+
+## Ricominciare da capo (1.4.1)
+⚙️ → in fondo, **Ricomincia da capo**: scrivi AZZERA e tocca "Azzera il Regno". Cancella impegni, pasti, spesa, dispensa, ricette vostre, genetliaci, punti e imprese su entrambi i telefoni. Restano i nomi, il collegamento a Drive e ai calendari. Stanze, quest e raccolta tornano quelle iniziali.
